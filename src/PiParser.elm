@@ -11,6 +11,9 @@ type ProcLit = Receive String String ProcLit -- x?y.P
              | Replicate ProcLit                -- !P
              | Null                          -- 0
 
+flip : (a -> b -> c) -> b -> a -> c
+flip f a b = f b a
+             
 -- Lexer
 lexeme : Parser a -> Parser a
 lexeme p = p |. spaces 
@@ -73,15 +76,29 @@ process =
           , create
           , replicate
           , null
-          , paren (lazy (\_ -> process))
+          , paren (lazy (\_ -> parallel))
           ]
-         
-       
+
+parallel : Parser ProcLit
+parallel =
+    process |> andThen (flip loop parallelHelp)
+        
+parallelHelp : ProcLit -> Parser (Step ProcLit ProcLit)
+parallelHelp p =
+    oneOf
+    [ succeed (\q -> Loop (Parallel p q))
+        |. lexeme (symbol "|")
+        |= process
+    , succeed ()
+        |> map (\_ -> Done p)
+    ]
+
+                                        
 parser : Parser ProcLit
 parser =
     succeed identity
        |. spaces
-       |= process
+       |= parallel
        |. end 
 
 -- show
@@ -90,8 +107,8 @@ show proc =
     case proc of
         Receive x y p -> x ++ "?" ++ y ++ "." ++ show p
         Send x y p -> x ++ "!" ++ y ++ "." ++ show p
-        Parallel p q -> "(" ++ show p ++ "|" ++ show q ++ ")"
-        Create x p -> "new " ++ x ++ "." ++ show p
+        Parallel p q -> show p ++ "|" ++ show q
+        Create x p -> "new " ++ x ++ "." ++ "(" ++ show p ++ ")"
         Replicate p -> "!" ++ show p
         Null -> "0"
         
