@@ -23,9 +23,6 @@ varLit = variable
          }
           
 -- Parser
-flip : (a -> b -> c) -> b -> a -> c
-flip f a b = f b a
-
 paren : Parser a -> Parser a
 paren p =
     succeed identity
@@ -40,6 +37,7 @@ receive channelName =
     succeed (Receive channelName) 
         |. lexeme (symbol "?")
         |= lexeme varLit
+        |. lexeme (symbol ".")
         |= lazy (\_ -> process)
 
 send : String -> Parser ProcLit
@@ -47,13 +45,7 @@ send channelName =
     succeed (Send channelName) 
         |. lexeme (symbol "!")
         |= lexeme varLit
-        |= lazy (\_ -> process)
-
-parallel : Parser ProcLit
-parallel =
-    succeed Parallel
-        |= lazy (\_ -> process)
-        |. lexeme (symbol "|")
+        |. lexeme (symbol ".")
         |= lazy (\_ -> process)
 
 create : Parser ProcLit
@@ -78,7 +70,6 @@ null =
 process : Parser ProcLit
 process =
     oneOf [ (lexeme varLit |> andThen (\n -> oneOf [ receive n, send n ]))
-          , parallel
           , create
           , replicate
           , null
@@ -94,6 +85,17 @@ parser =
        |. end 
 
 -- show
+show : ProcLit -> String
+show proc =
+    case proc of
+        Receive x y p -> x ++ "?" ++ y ++ "." ++ show p
+        Send x y p -> x ++ "!" ++ y ++ "." ++ show p
+        Parallel p q -> "(" ++ show p ++ "|" ++ show q ++ ")"
+        Create x p -> "new " ++ x ++ "." ++ show p
+        Replicate p -> "!" ++ show p
+        Null -> "0"
+        
+
 
 problem2String : Problem -> String
 problem2String problem = case problem of
