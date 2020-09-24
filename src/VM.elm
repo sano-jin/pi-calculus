@@ -33,15 +33,15 @@ lit2PFN procLit =
             { proc = Replicate p_, fn = p_.fn }
         PP.Null -> { proc = Null, fn = S.empty }
 
-normalize : ProcAndFN -> ProcAndFN
-normalize pfn =
+leftPara : ProcAndFN -> ProcAndFN
+leftPara pfn =
     case pfn.proc of
         Parallel p q -> case q.proc of
-                            Parallel ql qr -> normalize { proc = Parallel { proc = Parallel p ql
+                            Parallel ql qr -> leftPara { proc = Parallel { proc = Parallel p ql
                                                                           , fn = S.union p.fn ql.fn
                                                                           } qr
                                                         , fn = pfn.fn }
-                            _ -> { proc = Parallel (normalize p) (normalize q)
+                            _ -> { proc = Parallel (leftPara p) (leftPara q)
                                  , fn = pfn.fn }
         _ -> pfn
 
