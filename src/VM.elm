@@ -4,57 +4,177 @@ import PiParser as PP
 import Set as S
 import Dict as D
 
-type alias ProcAndFN = { proc : ProcVal, fn : S.Set String }
-type ProcVal = Receive String String ProcAndFN -- x?y.P
-             | Send String String ProcAndFN    -- x!y.P
-             | Parallel ProcAndFN ProcAndFN      -- P|Q
-             | Create String ProcAndFN         -- \x.P
-             | Replicate ProcAndFN                -- !P
-             | Null                         -- 0
+type ProcList =
+    ProcList
+    { send : List { x : String
+                  , y : String
+                  , p : ProcAndFN
+                  , fn : S.Set String }
+    , receive : List { x : String
+                     , y : String
+                     , p : ProcAndFN
+                     , fn : S.Set String }
+    , create : List { x : String
+                    , p : ProcAndFN
+                    , fn : S.Set String }
+    , replicate : List { p : ProcAndFN
+                       , fn : S.Set String }
+    }
 
+type alias ProcAndFN =
+    { ps : ProcList
+    , fn : S.Set String
+    } -- Null if all lists (send, ... , replicate) are empty
+
+null = { send = [], receive = [], create = [], replicate = [] }    
+    
 lit2PFN : PP.ProcLit -> ProcAndFN
 lit2PFN procLit =
     case procLit of
-        PP.Receive x y p ->
-            let p_ = lit2PFN p in 
-            { proc = Receive x y p_, fn = S.insert x <| S.remove y p_.fn }
         PP.Send x y p ->
-            let p_ = lit2PFN p in 
-            { proc = Receive x y p_, fn = S.insert x <| S.insert y p_.fn }
+            let p_ = lit2PFN p
+                fn = S.insert x <| S.insert y p_.fn
+            in
+            { ps = ProcList
+                  { null | send = [ { x = x, y = y, p = p_, fn = fn } ] }
+            , fn = fn
+            }
+        PP.Receive x y p ->
+            let p_ = lit2PFN p
+                fn = S.insert x <| S.remove y p_.fn in
+            { ps = ProcList
+                  { null | send = [ { x = x, y = y, p = p_, fn = fn } ] }
+            , fn = fn
+            }
         PP.Parallel p q ->
             let p_ = lit2PFN p
-                q_ = lit2PFN q in 
-            { proc = Parallel p_ q_, fn = S.union p_.fn q_.fn }
+                q_ = lit2PFN q 
+                (ProcList p_ps, ProcList q_ps) =  (p_.ps, q_.ps) in
+                { ps = ProcList
+                      { send = p_ps.send ++ q_ps.send
+                      , receive = p_ps.receive ++ q_ps.receive
+                      , create = p_ps.create ++ q_ps.create
+                      , replicate = p_ps.replicate ++ q_ps.replicate }
+                , fn = S.union p_.fn q_.fn
+                } 
         PP.Create x p ->
-            let p_ = lit2PFN p in 
-            { proc = Create x p_, fn = S.remove x p_.fn }
+            let p_ = lit2PFN p 
+                fn = S.remove x p_.fn in
+            { ps = ProcList
+                  { null | create = [ { x = x, p = p_, fn = fn } ] }
+            , fn = fn
+            }
         PP.Replicate p ->
             let p_ = lit2PFN p in 
-            { proc = Replicate p_, fn = p_.fn }
-        PP.Null -> { proc = Null, fn = S.empty }
-
-leftPara : ProcAndFN -> ProcAndFN
-leftPara pfn =
-    case pfn.proc of
-        Parallel p q -> case q.proc of
-                            Parallel ql qr -> leftPara { proc = Parallel { proc = Parallel p ql
-                                                                          , fn = S.union p.fn ql.fn
-                                                                          } qr
-                                                        , fn = pfn.fn }
-                            _ -> { proc = Parallel (leftPara p) (leftPara q)
-                                 , fn = pfn.fn }
-        _ -> pfn
+            { ps = ProcList
+                  { null | replicate = [ { p = p_, fn = p_.fn } ] }
+            , fn = p_.fn
+            }
+        PP.Null ->
+            { ps = ProcList null
+            , fn = S.empty  }               
 
 show : ProcAndFN -> String
 show pfn =
-    case pfn.proc of
-        Receive x y p -> x ++ "?" ++ y ++ "." ++ show p
-        Send x y p -> x ++ "!" ++ y ++ "." ++ show p
-        Parallel p q -> "(" ++ show p ++ "|" ++ show q ++ ")"
-        Create x p -> "new " ++ x ++ "." ++ "(" ++ show p ++ ")"
-        Replicate p -> "!" ++ show p
-        Null -> "0"
+    if isNull pfn then "0"
+    else
+        let (ProcList ps) = pfn.ps
+            sends = List.map (\p -> p.x ++ "!" ++ p.y ++ "." ++ show p.p) ps.send
+            receives = List.map (\p -> p.x ++ "?" ++ p.y ++ "." ++ show p.p) ps.receive
+            creates = List.map (\p -> "\\" ++ p.x ++ "." ++ show p.p) ps.create
+            replicates = List.map (\p -> "!" ++ show p.p) ps.replicate
+        in String.join "|" <| sends ++ receives ++ creates ++ replicates
 
+isNull : ProcAndFN -> Bool
+isNull pfn =
+    pfn.ps == ProcList null
+
+classify : (a -> Bool) -> List a -> (List a, List a)
+classify f list =
+    case list of
+        [] -> ([], [])
+        h::t -> if f h then Tuple.mapFirst ((::) h) <| classify f t
+                else Tuple.mapSecond ((::) h) <| classify f t
+
+tupleMapThird : (c -> x) -> (a, b, c) -> (a, b, x)
+tupleMapThird f (a, b, c) = (a, b, f c)
+    
+normalize : ProcAndFN -> ProcAndFN
+normalize pfn =
+    let (ProcList ps) = pfn.ps
+        normalizeChild = (\p -> { p | p = normalize p.p })
+        filterChildNull = List.filter (\p -> not <| isNull p.p )
+    in
+    { ps = ProcList
+          { send = List.map normalizeChild ps.send
+          , receive = List.map normalizeChild ps.receive
+          , create =
+              filterChildNull
+              <| List.map normalizeChild ps.create
+          , replicate = filterChildNull
+                        <| List.map normalizeChild ps.replicate
+          }
+    , fn = pfn.fn }
+{-- 
+classifyBound : String -> ProcAndFN -> (ProcAndFN, ProcList)
+classifyBound x pfn =
+    let (ProcList ps) = pfn.ps
+        classifyBound_ getFN procs =
+            classify (\proc -> S.member x <| getFN proc) procs
+        (boundSend, unBoundSend) = classifyBound_ (\(x, y, p_) -> ) ps.send
+        (boundReceive, unBoundReceive) = classifyBound_ ps.receive
+        (boundCreate, unBoundCreate) = classifyBound_ ps.create
+        (boundReplicate, unBoundReplicate) = classifyBound_ ps.replicate
+    in
+        ({ ps = ProcList
+               { send = boundSend
+               , receive = boundReceive
+               , create = boundCreate
+               , replicate = boundReplicate
+               }
+         , fn = pfn.fn }
+        , ProcList { send = boundSend
+                   , receive = boundReceive
+                   , create = boundCreate
+                   , replicate = boundReplicate
+                   }
+        )
+--}
+
+{--
+scope_extension : String -> ProcAndFN -> (ProcAndFN, ProcList)
+scope_extension x pfn =
+    --}
+
+{-- 
+normalize : ProcAndFN -> ProcAndFN
+normalize pfn =
+    let (ProcList ps) = pfn.ps
+        send = List.map (\(x, y, p) -> (x, y, normalize p)) ps.send
+        receive = List.map (\(x, y, p) -> (x, y, normalize p)) ps.receive
+        create = List.map (\(x, p) -> (x, normalize p)) ps.create
+        replicate = List.filter (not << isNull)
+                    <| List.map (\p -> normalize p) ps.replicate
+
+
+        (creates, unbounds) =
+            List.unzip
+                <| classify (\(x, pfn_) -> S.member x pfn_.fn) create
+        other_ps = List.map (\pfn_ -> let (ProcList ps_) = pfn_.ps in ps_)
+                   <| List.map Tuple.second unbounds
+        send_ = send :: List.map (\ps_ -> ps_.send) other_ps 
+        receive_ = receive :: List.map (\ps_ -> ps_.receive) other_ps 
+        create_ = creates :: List.map (\ps_ -> ps_.create) other_ps 
+        replicate_ = replicate :: List.map (\ps_ -> ps_.replicate) other_ps 
+    in
+    { ps = ProcList
+          { send = List.concat send_
+          , receive = List.concat receive_
+          , create = List.concat create_
+          , replicate = List.concat replicate_
+          }
+    , fn = pfn.fn }
+--}
 
 {--
 substitute : String -> ProcAndFN -> ProcAndFN -> ProcAndFN

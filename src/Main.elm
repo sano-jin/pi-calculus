@@ -40,7 +40,8 @@ update : Msg -> Model -> Model
 update msg model =
     case msg of
         Eval str -> case run PP.parser str of
-                        Ok term -> { model | errors = [], result = VM.show <| VM.leftPara <| VM.lit2PFN term }
+                        Ok term -> { model | errors = []
+                                   , result = VM.show <| VM.normalize <| VM.lit2PFN term }
                         Err err -> { model | errors = err, result = "error" }
                     
         Change str ->
