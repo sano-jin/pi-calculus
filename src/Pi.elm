@@ -1,4 +1,4 @@
-module VM exposing (..)
+module Pi exposing (..)
 
 import PiParser as PP
 import Set as S
