@@ -43,7 +43,7 @@ lit2PFN procLit =
             let p_ = lit2PFN p
                 fn = S.insert x <| S.remove y p_.fn in
             { ps = ProcList
-                  { null | send = [ { x = x, y = y, p = p_, fn = fn } ] }
+                  { null | receive = [ { x = x, y = y, p = p_, fn = fn } ] }
             , fn = fn
             }
         PP.Parallel p q ->
@@ -102,26 +102,45 @@ tupleMapThird f (a, b, c) = (a, b, f c)
 normalize : ProcAndFN -> ProcAndFN
 normalize pfn =
     let (ProcList ps) = pfn.ps
-        normalizeChild = (\p -> { p | p = normalize p.p })
-        filterChildNull = List.filter (\p -> not <| isNull p.p )
-    in
-    { ps = ProcList
-          { send = List.map normalizeChild ps.send
-          , receive = List.map normalizeChild ps.receive
-          , create =
-              filterChildNull
-              <| List.map normalizeChild ps.create
-          , replicate = filterChildNull
-                        <| List.map normalizeChild ps.replicate
+        mapNormalizeChild = List.map (\p -> { p | p = normalize p.p })
+        filterNull = mapNormalizeChild << List.filter (\p -> not <| isNull p.p )
+        creates = filterNull ps.create
+        ps_ = 
+          { null | send = mapNormalizeChild ps.send
+          , receive = mapNormalizeChild ps.receive
+          , replicate = filterNull ps.replicate
           }
-    , fn = pfn.fn }
-{-- 
+        (creates_, unbound) = scopeExtension creates
+    in
+        { ps = unionProcList (ProcList { ps_ | create = filterNull creates_ }) unbound
+        , fn = pfn.fn }
+
+scopeExtension : List { x : String, p : ProcAndFN, fn : S.Set String }
+               -> ( List { x : String, p : ProcAndFN, fn : S.Set String }, ProcList)
+scopeExtension =
+    Tuple.mapSecond (List.foldl unionProcList <| ProcList null)
+    << List.unzip 
+    << List.map (\create ->
+                     Tuple.mapFirst (\p -> { create | p = p, fn = S.remove create.x p.fn })
+                     <| classifyBound create.x create.p
+                )
+             
+                  
+unionProcList : ProcList -> ProcList -> ProcList
+unionProcList p1 p2 =
+    let (ProcList p1_, ProcList p2_) = (p1, p2) in
+    ProcList { send = p1_.send ++ p2_.send
+             , receive = p1_.receive ++ p2_.receive
+             , create = p1_.create ++ p2_.create
+             , replicate = p1_.replicate ++ p2_.replicate
+             }            
+    
 classifyBound : String -> ProcAndFN -> (ProcAndFN, ProcList)
 classifyBound x pfn =
     let (ProcList ps) = pfn.ps
-        classifyBound_ getFN procs =
-            classify (\proc -> S.member x <| getFN proc) procs
-        (boundSend, unBoundSend) = classifyBound_ (\(x, y, p_) -> ) ps.send
+        classifyBound_ procs =
+            classify (\proc -> S.member x proc.fn) procs
+        (boundSend, unBoundSend) = classifyBound_ ps.send
         (boundReceive, unBoundReceive) = classifyBound_ ps.receive
         (boundCreate, unBoundCreate) = classifyBound_ ps.create
         (boundReplicate, unBoundReplicate) = classifyBound_ ps.replicate
@@ -133,48 +152,12 @@ classifyBound x pfn =
                , replicate = boundReplicate
                }
          , fn = pfn.fn }
-        , ProcList { send = boundSend
-                   , receive = boundReceive
-                   , create = boundCreate
-                   , replicate = boundReplicate
+        , ProcList { send = unBoundSend
+                   , receive = unBoundReceive
+                   , create = unBoundCreate
+                   , replicate = unBoundReplicate
                    }
         )
---}
-
-{--
-scope_extension : String -> ProcAndFN -> (ProcAndFN, ProcList)
-scope_extension x pfn =
-    --}
-
-{-- 
-normalize : ProcAndFN -> ProcAndFN
-normalize pfn =
-    let (ProcList ps) = pfn.ps
-        send = List.map (\(x, y, p) -> (x, y, normalize p)) ps.send
-        receive = List.map (\(x, y, p) -> (x, y, normalize p)) ps.receive
-        create = List.map (\(x, p) -> (x, normalize p)) ps.create
-        replicate = List.filter (not << isNull)
-                    <| List.map (\p -> normalize p) ps.replicate
-
-
-        (creates, unbounds) =
-            List.unzip
-                <| classify (\(x, pfn_) -> S.member x pfn_.fn) create
-        other_ps = List.map (\pfn_ -> let (ProcList ps_) = pfn_.ps in ps_)
-                   <| List.map Tuple.second unbounds
-        send_ = send :: List.map (\ps_ -> ps_.send) other_ps 
-        receive_ = receive :: List.map (\ps_ -> ps_.receive) other_ps 
-        create_ = creates :: List.map (\ps_ -> ps_.create) other_ps 
-        replicate_ = replicate :: List.map (\ps_ -> ps_.replicate) other_ps 
-    in
-    { ps = ProcList
-          { send = List.concat send_
-          , receive = List.concat receive_
-          , create = List.concat create_
-          , replicate = List.concat replicate_
-          }
-    , fn = pfn.fn }
---}
 
 {--
 substitute : String -> ProcAndFN -> ProcAndFN -> ProcAndFN
