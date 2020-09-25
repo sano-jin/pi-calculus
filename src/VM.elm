@@ -81,8 +81,8 @@ show pfn =
         let (ProcList ps) = pfn.ps
             sends = List.map (\p -> p.x ++ "!" ++ p.y ++ "." ++ show p.p) ps.send
             receives = List.map (\p -> p.x ++ "?" ++ p.y ++ "." ++ show p.p) ps.receive
-            creates = List.map (\p -> "\\" ++ p.x ++ "." ++ show p.p) ps.create
-            replicates = List.map (\p -> "!" ++ show p.p) ps.replicate
+            creates = List.map (\p -> "\\" ++ p.x ++ ".(" ++ show p.p ++ ")") ps.create
+            replicates = List.map (\p -> "!" ++ "(" ++ show p.p ++ ")") ps.replicate
         in String.join "|" <| sends ++ receives ++ creates ++ replicates
 
 isNull : ProcAndFN -> Bool
