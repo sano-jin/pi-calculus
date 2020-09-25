@@ -74,17 +74,27 @@ lit2PFN procLit =
             { ps = ProcList null
             , fn = S.empty  }               
 
+procList2StringList : ProcList -> List String
+procList2StringList (ProcList ps) = 
+    let sends = List.map (\p -> p.x ++ "!" ++ p.y ++ "." ++ showWithParen p.p) ps.send
+        receives = List.map (\p -> p.x ++ "?" ++ p.y ++ "." ++ showWithParen p.p) ps.receive
+        creates = List.map (\p -> "\\" ++ p.x ++ "." ++ showWithParen p.p) ps.create
+        replicates = List.map (\p -> "!" ++ showWithParen p.p) ps.replicate
+    in sends ++ receives ++ creates ++ replicates
+            
 show : ProcAndFN -> String
 show pfn =
     if isNull pfn then "0"
-    else
-        let (ProcList ps) = pfn.ps
-            sends = List.map (\p -> p.x ++ "!" ++ p.y ++ "." ++ show p.p) ps.send
-            receives = List.map (\p -> p.x ++ "?" ++ p.y ++ "." ++ show p.p) ps.receive
-            creates = List.map (\p -> "\\" ++ p.x ++ ".(" ++ show p.p ++ ")") ps.create
-            replicates = List.map (\p -> "!" ++ "(" ++ show p.p ++ ")") ps.replicate
-        in String.join "|" <| sends ++ receives ++ creates ++ replicates
-
+    else String.join "|" <| procList2StringList pfn.ps
+        
+showWithParen : ProcAndFN -> String
+showWithParen pfn =
+    let psStrList = procList2StringList pfn.ps in
+    case psStrList of
+        [] -> "0"
+        [p] -> p
+        _ -> "(" ++ String.join "|" psStrList ++ ")"
+    
 isNull : ProcAndFN -> Bool
 isNull pfn =
     pfn.ps == ProcList null
@@ -159,30 +169,7 @@ classifyBound x pfn =
                    }
         )
 
-{--
-substitute : String -> ProcAndFN -> ProcAndFN -> ProcAndFN
-substitute var termAndFV1 termAndFV2 =
-    case termAndFV1.term of
-        VarVal x -> if x == var then termAndFV2
-                    else termAndFV1
-        AppVal fun val ->
-            let (fun_, val_) =  (substitute var fun termAndFV2, substitute var val termAndFV2) in
-            { term = AppVal fun_ val_
-            , fv = S.union fun_.fv val_.fv
-            }
-        LamVal x body ->
-            if x == var then termAndFV1
-            else let (x_, body_) =
-                         if S.member x termAndFV2.fv then
-                             let z = newVar x
-                                         <| S.union termAndFV2.fv body.fv in
-                             (z, substitute x body {term = VarVal z, fv = S.singleton z })
-                         else (x, body)
-                     body__ = substitute var body_ termAndFV2
-                 in { term = LamVal x_ body__
-                    , fv = S.remove x_ body__.fv
-                    }
---}
+
 -- convert to postfix notation
 getIndex : a -> List a -> Maybe Int
 getIndex x list =
@@ -193,7 +180,7 @@ getIndex x list =
                         else getIndexHelp t (i + 1)
     in getIndexHelp list 0
 
-                      {--
+{--
 toPostfixNotation : ProcAndFN -> List String -> String
 toPostfixNotation tFV env =
     case tFV.term of
@@ -227,7 +214,8 @@ showAppVal tFV =
         VarVal _ -> showT tFV
         AppVal tFV1 tFV2 -> "(" ++ showT tFV ++ ")"
         LamVal var body -> showAppFun tFV
-               
+--}               
+
 newVar : String -> S.Set String -> String
 newVar var fv =
     case S.member var fv of
@@ -239,4 +227,4 @@ newVar var fv =
                 _ ->  newVar (String.map
                                   (Char.fromCode << (+) 1 << Char.toCode) var) fv
                       
-                      --}
+ 
