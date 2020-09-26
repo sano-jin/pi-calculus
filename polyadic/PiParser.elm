@@ -8,12 +8,12 @@ import Util exposing (..)
 type Value = Name String
            | Int Int
 
-type alias ProcList = List Proc            -- P|Q
-type Proc = Send String String             -- x!y 
-          | Receive String String ProcList -- x?y.P
-          | Create String ProcList         -- \x.P
-          | Replicate ProcList             -- !P
-          | Null                           -- 0
+type alias ProcList = List Proc                   -- P|Q
+type Proc = Send String (List Value)              -- x![v1, ..., vn] 
+          | Receive String (List String) ProcList -- x?[v1, ..., vn].P
+          | Create String ProcList                -- \x.P
+          | Replicate ProcList                    -- !P
+          | Null                                  -- 0
 
 -- Lexer
 lexeme : Parser a -> Parser a
@@ -81,7 +81,7 @@ receive : String -> Parser Proc
 receive channelName =
     succeed (Receive channelName) 
         |. lexeme (symbol "?")
-        |= nameLit
+        |= list nameLit
         |. lexeme (symbol ".")
         |= lazy (\_ -> process)
 
@@ -89,7 +89,7 @@ send : String -> Parser Proc
 send channelName =
     succeed (Send channelName) 
         |. lexeme (symbol "!")
-        |= nameLit           
+        |= list valueLit           
     
 create : Parser Proc
 create =
@@ -139,6 +139,8 @@ showValue value =
     case value of
         Int i -> String.fromInt i
         Name n -> n
+
+showValues vs = "[" ++ String.join "," (List.map showValue vs) ++ "]"
                 
 showProcList : ProcList -> String
 showProcList ps = String.join "|" <| List.map show ps
@@ -150,8 +152,8 @@ show proc =
                         _ -> "(" ++ String.join "|" (List.map show ps) ++ ")"
     in
         case proc of
-            Send x y -> x ++ "!" ++ y
-            Receive x y p -> x ++ "?" ++ y ++ "." ++ showPL p
+            Send x y -> x ++ "!" ++ showValues y
+            Receive x y p -> x ++ "?" ++ "[" ++ String.join "," y ++ "]." ++ showPL p
             Create x p -> "new " ++ x ++ "." ++ showPL p
             Replicate p -> "!" ++ showPL p
             Null -> "0"        

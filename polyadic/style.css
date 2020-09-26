@@ -1,0 +1,66 @@
+body {
+    background-image: url("background.png");
+    background-repeat: no-repeat;
+    background-color: #171717;
+}
+
+.interpreter {
+    text-align: center;
+    margin: 40% auto;
+    position: relative;
+}
+
+.interpreter *{
+    background: transparent;
+    font-family: 'Inconsolata', monospace;
+    color: #eee;
+}
+
+.states {
+    text-align: left;
+}
+
+.console {
+}
+    
+.interpreter .console .reader::placeholder {
+  color: #999;
+}
+
+.interpreter .console .reader {
+    text-align: left;
+    border: 1px solid gray;
+    background: rgba(0,0,0,0.5);
+    outline: none;
+}
+
+.interpreter .console .submitter{
+    border: 1px solid gray;
+    border-radius: 50px;
+    height: max;
+    padding: 0 20px;
+    outline: none;
+}
+
+@media only screen and (min-width: 601px) {
+    .interpreter *{
+	font-size: 20px;
+    }
+    .interpreter .console .reader {
+	min-width: 550px;
+    }
+    .interpreter .console .submitter {
+	margin-left: 10px;
+    }
+}
+
+@media only screen and (max-width: 600px) {
+    .interpreter .console {
+	width: 100%;
+    }
+    
+    .interpreter *{
+	font-size: 18px;
+	width: 100%;
+    }
+}
