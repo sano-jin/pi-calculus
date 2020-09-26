@@ -6,7 +6,6 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput)
 import Parser exposing (run, DeadEnd, Problem (..))
 import PiParser as PP
-import Pi
 import Set as S
 import Dict as D
 
@@ -41,7 +40,7 @@ update msg model =
     case msg of
         Eval str -> case run PP.parser str of
                         Ok term -> { model | errors = []
-                                   , result = Pi.show <| Pi.normalize <| Pi.lit2PFN term }
+                                   , result = PP.show term }
                         Err err -> { model | errors = err, result = "error" }
                     
         Change str ->
