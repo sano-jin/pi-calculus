@@ -74,6 +74,7 @@ lit2PFN procLit =
             { ps = ProcList null
             , fn = S.empty  }               
 
+-- show            
 procList2StringList : ProcList -> List String
 procList2StringList (ProcList ps) = 
     let sends = List.map (\p -> p.x ++ "!" ++ p.y ++ "." ++ showWithParen p.p) ps.send
@@ -94,7 +95,8 @@ showWithParen pfn =
         [] -> "0"
         [p] -> p
         _ -> "(" ++ String.join "|" psStrList ++ ")"
-    
+
+-- canonicalize             
 isNull : ProcAndFN -> Bool
 isNull pfn =
     pfn.ps == ProcList null
@@ -135,7 +137,6 @@ scopeExtension =
                      <| classifyBound create.x create.p
                 )
              
-                  
 unionProcList : ProcList -> ProcList -> ProcList
 unionProcList p1 p2 =
     let (ProcList p1_, ProcList p2_) = (p1, p2) in
@@ -169,53 +170,76 @@ classifyBound x pfn =
                    }
         )
 
+-- substitution        
+substituteSend : String -> String
+               -> { x : String, y : String, p : ProcAndFN, fn : S.Set String }
+               -> { x : String, y : String, p : ProcAndFN, fn : S.Set String }
+substituteSend y z q =
+    let x_ = if q.x == y then z else q.x
+        y_ = if q.y == y then z else q.y
+        p_ = substitute y z q.p
+    in
+    { x = x_
+    , y = y_
+    , p = p_
+    , fn = S.insert x_ <| S.insert y_ p_.fn
+    }
+                 
+substituteReceive : String -> String
+                  -> { x : String, y : String, p : ProcAndFN, fn : S.Set String }
+                  -> { x : String, y : String, p : ProcAndFN, fn : S.Set String }
+substituteReceive y z q =
+    let x_ = if q.x == y then z else q.x
+        p_ = if q.y == y then q.p
+             else
+                 let p__ = 
+                         if q.y /= z then q.p
+                         else substitute z (newVar z <| S.insert z q.p.fn) q.p
+                 in substitute y z p__
+    in
+    { q | x = x_
+    , p = p_
+    , fn = S.insert x_ <| S.remove q.y p_.fn
+    }
 
--- convert to postfix notation
-getIndex : a -> List a -> Maybe Int
-getIndex x list =
-    let getIndexHelp l i =
-            case l of
-                [] -> Nothing
-                h::t -> if h == x then Just i
-                        else getIndexHelp t (i + 1)
-    in getIndexHelp list 0
+substituteCreate : String -> String
+                 -> { x : String, p : ProcAndFN, fn : S.Set String }
+                 -> { x : String, p : ProcAndFN, fn : S.Set String }
+substituteCreate y z q =
+    let
+        p_ = if q.x == y then q.p
+             else
+                 let p__ = 
+                         if q.x /= z then q.p
+                         else substitute z (newVar z <| S.insert z q.p.fn) q.p
+                 in substitute y z p__
+    in
+    { q | p = p_
+    , fn = S.remove q.x p_.fn
+    }
 
-{--
-toPostfixNotation : ProcAndFN -> List String -> String
-toPostfixNotation tFV env =
-    case tFV.term of
-        VarVal x -> case getIndex x env of
-                        Nothing -> x
-                        Just i -> String.fromInt i
-        AppVal m n -> toPostfixNotation m env ++ toPostfixNotation n env ++ "@"
-        LamVal x body -> toPostfixNotation body (x::env) ++ "\\"
+substituteReplicate : String -> String
+                      -> { p : ProcAndFN, fn : S.Set String }
+                      -> { p : ProcAndFN, fn : S.Set String }
+substituteReplicate y z q =
+    let p_ = substitute y z q.p in
+    { p = p_
+    , fn = p_.fn
+    }            
 
--- show
-showT : ProcAndFN -> String
-showT tFV =
-    case tFV.term of
-        VarVal x -> x
-        AppVal tFV1 tFV2 -> showAppFun tFV1 ++ showAppVal tFV2
-        LamVal var body -> "\\" ++ var ++ showCurriedAbs body 
-
-showCurriedAbs tFV =
-    case tFV.term of
-        LamVal var body -> var ++ showCurriedAbs body
-        _ -> "." ++ showT tFV
-
-showAppFun tFV =
-    case tFV.term of
-        LamVal var body ->
-            "(" ++ showT tFV ++ ")"
-        _ -> showT tFV
-
-showAppVal tFV =
-    case tFV.term of
-        VarVal _ -> showT tFV
-        AppVal tFV1 tFV2 -> "(" ++ showT tFV ++ ")"
-        LamVal var body -> showAppFun tFV
---}               
-
+substitute : String -> String -> ProcAndFN -> ProcAndFN        
+substitute y z q =
+    let (ProcList ps) = q.ps
+        send_ = List.map (substituteSend y z) ps.send
+        receive_ = List.map (substituteReceive y z) ps.receive
+        create_ = List.map (substituteCreate y z) ps.create
+        replicate_ = List.map (substituteReplicate y z) ps.replicate
+    in { q | ps = ProcList { ps | send = send_
+                                 , receive = receive_
+                                 , create = create_
+                                 , replicate = replicate_
+                           } }       
+             
 newVar : String -> S.Set String -> String
 newVar var fv =
     case S.member var fv of
@@ -227,4 +251,7 @@ newVar var fv =
                 _ ->  newVar (String.map
                                   (Char.fromCode << (+) 1 << Char.toCode) var) fv
                       
- 
+eval : ProcAndFN -> Maybe ProcAndFN 
+eval pfn =
+    let (ProcList ps) = pfn.ps in
+    
