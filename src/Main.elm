@@ -6,6 +6,7 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput)
 import Parser exposing (run, DeadEnd, Problem (..))
 import PiParser as PP
+import Pi as Pi
 import Set as S
 import Dict as D
 
@@ -18,14 +19,16 @@ main = Browser.sandbox { init = init
 -- Model
 type alias Model =
     { inputString : String
-    , result : String
+    , exp : String
+    , result : List String
     , errors : List DeadEnd
     }
 
 init : Model
 init =
     { inputString = "0"
-    , result = ""
+    , exp = ""
+    , result = []
     , errors = []
     }
 
@@ -40,8 +43,12 @@ update msg model =
     case msg of
         Eval str -> case run PP.parser str of
                         Ok term -> { model | errors = []
-                                   , result = PP.showProcList term }
-                        Err err -> { model | errors = err, result = "error" }
+                                   , exp = PP.showProcList term
+                                   , result = Pi.run term
+                                   }
+                        Err err -> { model | errors = err
+                                   , exp = "error"
+                                   , result = [] }
                     
         Change str ->
             { model | inputString = str }
@@ -65,7 +72,9 @@ view model =
                     , value model.inputString, onInput Change ] []
             , button [ class "submitter"
                      , onClick <| Eval model.inputString ] [ text "run" ]
-            , div [] [ text model.result ]
+            , div [] [ text model.exp ]
+            , ul [ class "results" ]
+                <| List.map (\str -> li [] [ text str ]) model.result
             ]
         ]
     

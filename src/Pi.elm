@@ -64,30 +64,69 @@ substitute var val proc =
                 
 send : String -> String -> State -> State
 send channel value (env, outputs) =
-    let send_ ch =
+    let message = "sent '" ++ value ++ "' over channel '" ++ channel ++ "'"
+        send_ ch =
             case ch of
                 Senders ss -> ( Senders <| ss ++ [ value ]
-                              , ( identity, "sent " ++ value ++ ". waiting to be received." )
+                              , ( identity
+                                , message ++ ". waiting to be received." )
                               )
                 Receivers [] -> ( Senders [ value ]
-                                , (identity, "sent " ++ value ++ ". waiting to be received." )
+                                , (identity, message ++ ". waiting to be received." )
                                 )
                 Receivers ((var, procList) :: rs) ->
                     let procList_ = List.map (substitute var value) procList in
                     ( Receivers rs
-                    , (\state -> List.foldl eval state procList_
-                      , "sent " ++ value ++ " and received." )
-                    )
-    
-        (env_, (f, output)) = lookupMap send_ value env in
+                    , (evalPL procList_ 
+                      , message ++ " and received with '" ++ var ++ "'.")
+                    )    
+        (env_, (f, output)) = lookupMap send_ channel env in
    f (env_, output::outputs)
-    
+
+receive : String -> String -> ProcList -> State -> State
+receive channel var procList (env, outputs) =
+    let messageWaiting = "channel '" ++ channel ++ "' is waiting to receive a value."
+        messageReceived value =
+            "channel '" ++ channel ++ "' received '" ++ value ++ "', and bound it to '" ++ var ++ "'."
+        recv_ ch =
+            case ch of
+                Receivers ss -> ( Receivers <| ss ++ [ (var, procList) ]
+                              , ( identity, messageWaiting )
+                              )
+                Senders [] -> ( Receivers [ (var, procList) ]
+                                , (identity, messageWaiting )
+                                )
+                Senders (value :: ss) ->
+                    let procList_ = List.map (substitute var value) procList in
+                    ( Senders ss
+                    , (evalPL procList_
+                      , messageReceived value)
+                    )    
+        (env_, (f, output)) = lookupMap recv_ channel env in
+   f (env_, output::outputs)
+
+create : String -> ProcList -> State -> State
+create channel procList (env, outputs) =
+    let message = "created new channel '" ++ channel ++ "'."
+        state = ((channel, Senders [])::env, message::outputs) in
+    Tuple.mapFirst (List.drop 1) <| evalPL procList state
+
+evalPL : ProcList -> State -> State
+evalPL procList state = List.foldl eval state procList
+         
 eval : Proc -> State -> State
 eval proc state =
     case proc of
-        Send x values -> send x values state
+        Send ch values -> send ch values state
+        Receive ch var p -> receive ch var p state
+        Create ch p -> create ch p state 
         _ -> state
 
+run : ProcList -> List String
+run procList =
+    List.reverse
+        <| Tuple.second
+            <| evalPL procList ([], [])
                          
 newVar : String -> S.Set String -> String
 newVar var fv =
