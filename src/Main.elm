@@ -26,7 +26,7 @@ type alias Model =
 
 init : Model
 init =
-    { inputString = "0"
+    { inputString = "x?y.y!w|z?u.0|\\z.(z?v.0|x!z)"
     , exp = ""
     , result = []
     , errors = []

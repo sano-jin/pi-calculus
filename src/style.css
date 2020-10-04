@@ -1,19 +1,16 @@
 body {
-    background-image: url("background.png");
     background-repeat: no-repeat;
-    background-color: #171717;
 }
 
 .interpreter {
     text-align: center;
-    margin: 40% auto;
+    margin: 20px auto;
     position: relative;
 }
 
 .interpreter *{
     background: transparent;
     font-family: 'Inconsolata', monospace;
-    color: #eee;
 }
 
 .results {
@@ -24,13 +21,11 @@ body {
 }
     
 .interpreter .console .reader::placeholder {
-  color: #999;
 }
 
 .interpreter .console .reader {
     text-align: left;
     border: 1px solid gray;
-    background: rgba(0,0,0,0.5);
     outline: none;
 }
 
